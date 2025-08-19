@@ -13,17 +13,19 @@ import {
   ChevronLeft,
   ChevronRight,
   Building2,
-  MessageSquare
+  MessageSquare,
+  Database,
+  ClipboardList,
+  MessageCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
-  { name: "Search", href: "/search", icon: Search },
-  { name: "Deals", href: "/deals", icon: FileText },
-  { name: "Clients", href: "/clients", icon: Users },
-  { name: "Documents", href: "/documents", icon: Building2 },
+  { name: "MLS Interface", href: "/mls", icon: Database },
+  { name: "Transaction Coordinator", href: "/transactions", icon: ClipboardList },
+  { name: "Client Communications", href: "/communications", icon: MessageCircle },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
