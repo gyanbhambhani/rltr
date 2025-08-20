@@ -1,0 +1,32 @@
+# Backend-only development stack
+# For full stack, use the root docker-compose.yml
+services:
+  api:
+    build: .
+    env_file: env.example
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    ports: ["8000:8000"]
+    depends_on: [db, redis]
+    volumes: [".:/app"]
+
+  worker:
+    build: .
+    env_file: env.example
+    command: celery -A app.workers.celery_app worker -l info
+    depends_on: [api, db, redis]
+    volumes: [".:/app"]
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: rltr
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+
+  redis:
+    image: redis:7
+    ports: ["6379:6379"]
+
+volumes:
+  pgdata:

@@ -1,0 +1,118 @@
+# RLTR Full Stack Docker Compose
+
+x-build-args: &build-args
+  BUILDKIT_INLINE_CACHE: 1
+
+services:
+  # Database
+  db:
+    image: postgres:16
+    env_file: .env
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 2s
+      retries: 3
+
+  # Redis for backend workers
+  redis:
+    image: redis:7
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 3
+
+  # Backend API
+  backend:
+    build: 
+      context: ./apps/backend
+      dockerfile: Dockerfile
+      args: *build-args
+    env_file: .env
+    environment:
+      POSTGRES_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+    ports: ["8000:8000"]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes: ["./apps/backend:/app"]
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 2
+      start_period: 10s
+    restart: unless-stopped
+
+  # Backend worker
+  worker:
+    build: 
+      context: ./apps/backend
+      dockerfile: Dockerfile
+      args: *build-args
+    env_file: .env
+    environment:
+      POSTGRES_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    volumes: ["./apps/backend:/app"]
+    command: celery -A app.workers.celery_app worker -l info
+    restart: unless-stopped
+
+  # Frontend
+  frontend:
+    build: 
+      context: .
+      dockerfile: ./apps/web/Dockerfile
+      args: *build-args
+    ports: ["3000:3000"]
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000/api
+    depends_on:
+      backend:
+        condition: service_healthy
+    volumes: [".:/app", "/app/node_modules", "/app/.next"]
+    command: npm run dev
+    restart: unless-stopped
+
+  # Migration service (runs once and exits)
+  migrations:
+    build: 
+      context: ./apps/backend
+      dockerfile: Dockerfile
+      args: *build-args
+    env_file: .env
+    environment:
+      POSTGRES_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes: ["./apps/backend:/app"]
+    command: sh -c "sleep 5 && alembic upgrade head"
+    restart: "no"
+
+volumes:
+  pgdata:
+
+networks:
+  default:
+    name: rltr-network
